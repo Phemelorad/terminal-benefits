@@ -7,6 +7,32 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Source+Sans+3:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
+  .user-label    { font-size: 0.7rem; color: var(--gold-light); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 2px; }
+  .user-name     { font-size: 0.95rem; color: var(--white); font-weight: 600; line-height: 1.2; }
+  .user-meta     { display: flex; align-items: center; gap: 8px; margin-top: 4px; margin-bottom: 10px; }
+  .user-dept     { font-size: 0.72rem; color: rgba(255,255,255,0.45); }
+
+  .role-badge {
+    font-size: 0.62rem; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 2px;
+  }
+  .role-admin   { background: rgba(200,168,75,0.25); color: var(--gold); }
+  .role-officer { background: rgba(255,255,255,0.1);  color: rgba(255,255,255,0.6); }
+  .role-viewer  { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.4); }
+
+  .btn-logout {
+    background: transparent;
+    border: 1px solid rgba(200,168,75,0.4);
+    color: var(--gold-light);
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.72rem; letter-spacing: 0.08em;
+    padding: 5px 14px; cursor: pointer;
+    transition: all 0.2s; text-transform: uppercase;
+  }
+  .btn-logout:hover { background: var(--gold); color: var(--navy); border-color: var(--gold); }
+</style>
+  <style>
     :root {
       --navy: #0f1f3d;
       --navy-mid: #1a3260;
@@ -52,7 +78,7 @@
 
     .crest-icon {
       width: 52px; height: 52px;
-      border: 2px solid var(--gold); border-radius: 50%;
+      /*border: 2px solid var(--gold); border-radius: 50%;*/
       display: flex; align-items: center; justify-content: center;
       color: var(--gold); font-size: 22px;
     }
@@ -407,20 +433,24 @@
 <!-- HEADER -->
 <header class="site-header">
   <div class="header-top">
-    <div class="header-crest"><div class="crest-icon">⚖</div></div>
+    <div class="header-crest"><div class="crest-icon"><img src="Code-of-Arms-colour.png" style="width:100px; height:50px;" alt="coa"></div></div>
     <div class="header-titles">
       <h1>Management Services Terminal Benefits Form</h1>
-      <div class="tagline">Government of Botswana &nbsp;·&nbsp; Human Resource Division</div>
+      <div class="tagline">Ministry of Labour & Home Affairs &nbsp;·&nbsp; Management Services</div>
     </div>
     <div class="header-user">
-      <div class="user-label">Logged in as</div>
-      <div class="user-email" id="user-email">officer@gov.bw</div>
-      <button class="btn-logout">Sign Out</button>
-    </div>
+  <div class="user-label">Logged in as</div>
+  <div class="user-name" id="user-email">Loading…</div>
+  <div class="user-meta">
+    <span class="role-badge" id="user-role"></span>
+    <span class="user-dept"  id="user-dept"></span>
+  </div>
+  <button class="btn-logout" onclick="logout()">Sign Out</button>
+</div>
   </div>
   <nav class="site-nav">
     <button onclick="location.href='index.html'">Home</button>
-    <button onclick="location.href='index.html'">Dashboard</button>
+    <button onclick="location.href='index.html'">Form</button>
     <button class="active">Entries</button>
   </nav>
 </header>
@@ -524,11 +554,71 @@
 </div>
 
 <script>
+  
+  const SUPABASE_URL  = 'https://qrxfpmuvtsklgitiuosh.supabase.co';
+  const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyeGZwbXV2dHNrbGdpdGl1b3NoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMzE5ODksImV4cCI6MjA4ODYwNzk4OX0.8AlSa32_3TqrSAqlikg6618gAxXtmC5vVLd1acrJeMo';
+
+  const { createClient } = supabase;
+  const db = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+  // ── Auth guard + populate header ──────────────────────
+  (async () => {
+    const { data: { session } } = await db.auth.getSession();
+
+    if (!session) {
+      location.replace('login.html');
+      return;
+    }
+
+    // Pull profile from user_profiles table
+    const { data: profile } = await db
+      .from('user_profiles')
+      .select('full_name, role, department_code')
+      .eq('id', session.user.id)
+      .single();
+
+    // ── Populate header fields ──────────────────────────
+    const name = profile?.full_name || session.user.email;
+    const role = profile?.role      || 'officer';
+    const dept = profile?.department_code || '';
+
+    // "Logged in as" name
+    const emailEl = document.getElementById('user-email');
+    if (emailEl) emailEl.textContent = name;
+
+    // Role badge (if element exists)
+    const roleEl = document.getElementById('user-role');
+    if (roleEl) {
+      roleEl.textContent = role.charAt(0).toUpperCase() + role.slice(1);
+      roleEl.className   = `role-badge role-${role}`;
+    }
+
+    // Department label (if element exists)
+    const deptEl = document.getElementById('user-dept');
+    if (deptEl && dept) deptEl.textContent = dept;
+
+    // Store in sessionStorage so other scripts can use it
+    sessionStorage.setItem('user_name',  name);
+    sessionStorage.setItem('user_email', session.user.email);
+    sessionStorage.setItem('user_role',  role);
+    sessionStorage.setItem('user_dept',  dept);
+    sessionStorage.setItem('user_id',    session.user.id);
+  })();
+
+  // ── Logout ────────────────────────────────────────────
+  async function logout() {
+    sessionStorage.clear();
+    await db.auth.signOut();
+    location.replace('login.html');
+  }
+
+
   // ══════════════════════════════════════════════════════
   //  🔑 SUPABASE CONFIG — same keys as index.html
   // ══════════════════════════════════════════════════════
-  const SUPABASE_URL  = 'https://YOUR_PROJECT_ID.supabase.co';
-  const SUPABASE_ANON = 'YOUR_ANON_PUBLIC_KEY';
+   const SUPABASE_URL  = 'https://qrxfpmuvtsklgitiuosh.supabase.co';
+  const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFyeGZwbXV2dHNrbGdpdGl1b3NoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMzE5ODksImV4cCI6MjA4ODYwNzk4OX0.8AlSa32_3TqrSAqlikg6618gAxXtmC5vVLd1acrJeMo';
+
 
   const { createClient } = supabase;
   const db = createClient(SUPABASE_URL, SUPABASE_ANON);
